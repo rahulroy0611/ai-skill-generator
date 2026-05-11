@@ -1,7 +1,7 @@
--- PDF to Skill Database Schema
+-- AI Skill Generator Database Schema
 
 -- Create database first
--- CREATE DATABASE pdftoskill;
+-- CREATE DATABASE ai_skill_generator;
 
 -- Skills table
 CREATE TABLE IF NOT EXISTS skills (

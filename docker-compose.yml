@@ -1,23 +1,21 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
   db:
     image: pgvector/pgvector:pg16
     container_name: ai-skill-generator-db
     environment:
       POSTGRES_DB: ai_skill_generator
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_skill_generator"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Backend API
   backend:
     build:
       context: ./backend
@@ -27,12 +25,14 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Override DATABASE_URL to use the 'db' service name instead of localhost
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/ai_skill_generator
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
 
-  # Frontend
   frontend:
     build:
       context: ./frontend

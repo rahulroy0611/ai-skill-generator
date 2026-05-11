@@ -83,6 +83,8 @@ docker compose up -d
 
 Open **http://localhost** in your browser. Done.
 
+> **Note:** The `.env` file must be at the project root (next to `docker-compose.yml`), not inside `backend/`.
+
 ### Option B — Manual
 
 > **Requirements:** Python 3.11+ · Node.js 18+ · PostgreSQL 16+
@@ -98,6 +100,51 @@ uvicorn app.main:app --reload --port 8000
 # 2. Frontend  (new terminal)
 cd frontend
 npm install && npm run dev
+```
+
+---
+
+## ⚙️ Configuration
+
+Copy the sample and fill in your values:
+
+```bash
+cp backend/.env.sample .env
+```
+
+```env
+# PostgreSQL
+DATABASE_URL=postgresql+asyncpg://postgres:your_password@localhost:5432/ai_skill_generator
+
+# LLM — used for RAG answers (optional, get key at platform.minimax.ai)
+LLM_API_KEY=
+LLM_API_BASE=https://api.minimax.chat/v1
+
+# Embedding model (default is fine for most use cases)
+EMBED_MODEL_NAME=all-MiniLM-L6-v2
+```
+
+> **Docker vs manual:** When running via Docker the `DATABASE_URL` host is automatically overridden to use the `db` service name — you don't need to change it in `.env`.
+
+> Without `LLM_API_KEY` the app still generates all skill files and embeddings. Only RAG query answers fall back to a stub.
+
+### Docker with a custom password
+
+```bash
+# Pass POSTGRES_PASSWORD inline
+POSTGRES_PASSWORD=mysecret docker compose up -d
+
+# Or on PowerShell
+$env:POSTGRES_PASSWORD="mysecret"; docker compose up -d
+```
+
+### Useful Docker commands
+
+```bash
+docker compose up -d          # start in background
+docker compose logs -f        # stream logs
+docker compose down           # stop
+docker compose down -v        # stop + wipe database
 ```
 
 ---
@@ -185,6 +232,8 @@ pyinstaller --onefile --console --name ai-skill-generator cli.py
 
 1. Go to **claude.ai → Skills → Upload skill**
 2. Upload the `.skill` file
+
+The `.skill` file is a ZIP archive containing `SKILL.md` with YAML frontmatter — the format Claude requires.
 
 </details>
 
@@ -292,26 +341,6 @@ curl -X POST http://localhost:8000/skills/1/query \
 ```bash
 curl "http://localhost:8000/skills/1/export?agent=cursor" -o .cursorrules
 ```
-
----
-
-## ⚙️ Configuration
-
-```env
-# backend/.env
-
-# PostgreSQL
-DATABASE_URL=postgresql+asyncpg://postgres:your_password@localhost:5432/pdftoskill
-
-# LLM — used for RAG answers (optional, get key at platform.minimax.ai)
-LLM_API_KEY=
-LLM_API_BASE=https://api.minimax.chat/v1
-
-# Embedding model (default is fine for most use cases)
-EMBED_MODEL_NAME=all-MiniLM-L6-v2
-```
-
-> Without `LLM_API_KEY` the app still generates all skill files and embeddings. Only RAG query answers fall back to a stub.
 
 ---
 
