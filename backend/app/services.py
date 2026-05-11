@@ -154,8 +154,11 @@ class SkillBuilder:
         blueprint = self.llm_client.analyze_pdf(text)
 
         async with AsyncSessionLocal() as db:
+            skill_name = filename
+            for ext in (".pdf", ".txt", ".md"):
+                skill_name = skill_name.replace(ext, "")
             skill = Skill(
-                name=filename.replace(".pdf", "") or blueprint.get("skill_name", "skill"),
+                name=skill_name or blueprint.get("skill_name", "skill"),
                 skill_type=blueprint.get("skill_type", "rag"),
                 skill_metadata={
                     "description": blueprint.get("description", ""),
@@ -216,10 +219,10 @@ class SkillQueryService:
                     return {"answer": "No embeddings found in this skill.", "sources": []}
 
                 similarities.sort(key=lambda x: x[0], reverse=True)
-                
+
                 top_chunks = [s[1] for s in similarities[:5] if s[1] and len(s[1].strip()) > 0]
                 context = "\n\n".join(top_chunks)
-                
+
                 if not context:
                     return {"answer": "This skill has no readable content. The PDF may have only images or be password protected.", "sources": []}
 
@@ -228,6 +231,4 @@ class SkillQueryService:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return {"answer": f"Error querying skill: {str(e)}", "sources": []}
-        except Exception as e:
             return {"answer": f"Error querying skill: {str(e)}", "sources": []}

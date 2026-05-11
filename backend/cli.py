@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import asyncio
+import zipfile
 import tempfile
 from datetime import datetime
 
@@ -11,10 +12,23 @@ import pdfplumber
 import httpx
 from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 EMBED_MODEL_NAME = os.environ.get("EMBED_MODEL_NAME", "all-MiniLM-L6-v2")
 
+AGENT_CONFIGS = {
+    "opencode":     "AGENTS.md",
+    "codex":        "AGENTS.md",
+    "cursor":       ".cursorrules",
+    "copilot":      "copilot-instructions.md",
+    "windsurf":     ".windsurfrules",
+    "cline":        ".clinerules",
+    "aider":        "CONVENTIONS.md",
+    "systemprompt": "system-prompt.txt",
+}
+
+
+# ── Text extraction ──────────────────────────────────────────────────────────
 
 def extract_text_pdf(file_path: str) -> str:
     text = ""
@@ -26,28 +40,17 @@ def extract_text_pdf(file_path: str) -> str:
 
 def chunk_text(text: str, chunk_size: int = 500) -> list[str]:
     sentences = re.split(r"(?<=[.!?])\s+", text)
-    chunks = []
-    current_chunk = ""
+    chunks, current = [], ""
     for sentence in sentences:
-        if len(current_chunk) + len(sentence) <= chunk_size:
-            current_chunk += " " + sentence
+        if len(current) + len(sentence) <= chunk_size:
+            current += " " + sentence
         else:
-            if current_chunk:
-                chunks.append(current_chunk.strip())
-            current_chunk = sentence
-    if current_chunk:
-        chunks.append(current_chunk.strip())
+            if current:
+                chunks.append(current.strip())
+            current = sentence
+    if current:
+        chunks.append(current.strip())
     return chunks
-
-
-def extract_title(url: str) -> str:
-    try:
-        response = httpx.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, follow_redirects=True)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        title = soup.find('title')
-        return title.text.strip() if title else urlparse(url).netloc
-    except Exception:
-        return urlparse(url).netloc
 
 
 def extract_text_html(html: str) -> str:
@@ -56,101 +59,138 @@ def extract_text_html(html: str) -> str:
         tag.decompose()
     text = soup.get_text(separator='\n')
     lines = [line.strip() for line in text.split('\n')]
-    return '\n'.join([line for line in lines if line])
+    return '\n'.join(line for line in lines if line)
 
 
-def is_internal_link(base_url: str, link: str, base_path_prefix: str = "") -> bool:
-    if not link or link.startswith('#') or link.startswith('mailto:') or link.startswith('tel:'):
+# ── Web crawler ──────────────────────────────────────────────────────────────
+
+def _normalize_url(base_url: str, link: str):
+    if not link:
+        return None
+    try:
+        full = urljoin(base_url, link.strip())
+        parsed = urlparse(full)
+        path = re.sub(r'/+', '/', parsed.path.rstrip('/')) or '/'
+        clean = f"{parsed.scheme}://{parsed.netloc}{path}"
+        if parsed.query:
+            clean += f"?{parsed.query}"
+        return clean
+    except Exception:
+        return None
+
+
+def _is_internal(base_url: str, link: str, prefix: str) -> bool:
+    if not link:
         return False
     link = link.strip()
-    if link.startswith('http://') or link.startswith('https://'):
+    if link.startswith(('#', 'mailto:', 'tel:', 'javascript:')):
+        return False
+    if link.startswith(('http://', 'https://')):
         parsed = urlparse(link)
         if parsed.netloc != urlparse(base_url).netloc:
             return False
-        if base_path_prefix and not parsed.path.startswith(base_path_prefix):
+        if prefix and not parsed.path.startswith(prefix):
             return False
-        return True
     return True
 
 
-def normalize_url(base_url: str, link: str) -> str:
-    from urllib.parse import urljoin
-    if not link:
-        return None
-    link = link.strip()
-    try:
-        full_url = urljoin(base_url, link)
-        parsed = urlparse(full_url)
-        path = re.sub(r'/+', '/', parsed.path.rstrip('/')) or '/'
-        clean_url = f"{parsed.scheme}://{parsed.netloc}{path}"
-        if parsed.query:
-            clean_url += f"?{parsed.query}"
-        return clean_url
-    except Exception:
-        return None
+async def _fetch_sitemap(client, base_url: str, prefix: str, headers: dict) -> list[str]:
+    parsed = urlparse(base_url)
+    root = f"{parsed.scheme}://{parsed.netloc}"
+    urls, seen = [], set()
+
+    async def parse(sitemap_url):
+        if sitemap_url in seen:
+            return
+        seen.add(sitemap_url)
+        try:
+            r = await client.get(sitemap_url, headers=headers, timeout=15, follow_redirects=True)
+            if r.status_code != 200:
+                return
+            soup = BeautifulSoup(r.text, 'xml')
+            for loc in soup.find_all('sitemap'):
+                tag = loc.find('loc')
+                if tag and tag.text.strip():
+                    await parse(tag.text.strip())
+            for loc in soup.find_all('url'):
+                tag = loc.find('loc')
+                if tag and tag.text.strip():
+                    url = _normalize_url(base_url, tag.text.strip())
+                    if url and (not prefix or urlparse(url).path.startswith(prefix)):
+                        urls.append(url)
+        except Exception:
+            pass
+
+    for candidate in [f"{root}/sitemap.xml", f"{root}/sitemap_index.xml"]:
+        await parse(candidate)
+    return urls
 
 
 async def crawl_website_async(url: str, max_pages: int = None, max_chars: int = None, progress_callback=None):
     visited = set()
     pages_text = []
     fetched = 0
+    title = None
     semaphore = asyncio.Semaphore(10)
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
     parsed_start = urlparse(url)
-    base_path_prefix = ""
     path = parsed_start.path
+    prefix = ""
     if path and path != '/':
         if not path.endswith('/'):
             path = path.rsplit('/', 1)[0] + '/'
-        base_path_prefix = path
+        prefix = path
 
     async def fetch_page(client, u):
         async with semaphore:
             try:
-                response = await client.get(u, headers=headers, timeout=15, follow_redirects=True)
-                if response.status_code == 200 and 'text/html' in response.headers.get('content-type', ''):
-                    return u, response.text
+                r = await client.get(u, headers=headers, timeout=15, follow_redirects=True)
+                if r.status_code == 200 and 'text/html' in r.headers.get('content-type', ''):
+                    return u, r.text
             except Exception:
                 pass
         return None
 
-    queue = [url]
+    async with httpx.AsyncClient() as client:
+        sitemap_urls = await _fetch_sitemap(client, url, prefix, headers)
+        queue = list(dict.fromkeys([url] + sitemap_urls)) if sitemap_urls else [url]
 
     async with httpx.AsyncClient() as client:
         while queue:
             if max_pages and len(visited) >= max_pages:
                 break
-
-            batch = queue[:20]
-            queue = queue[20:]
-
-            tasks = [fetch_page(client, u) for u in batch]
-            results = await asyncio.gather(*tasks)
+            batch, queue = queue[:20], queue[20:]
+            results = await asyncio.gather(*[fetch_page(client, u) for u in batch])
 
             new_links = []
             for result in results:
-                if result:
-                    page_url, html = result
-                    if page_url in visited:
-                        continue
-                    visited.add(page_url)
-                    fetched += 1
+                if not result:
+                    continue
+                page_url, html = result
+                if page_url in visited:
+                    continue
+                visited.add(page_url)
+                fetched += 1
 
-                    text = extract_text_html(html)
-                    if text.strip():
-                        pages_text.append(f"=== {page_url} ===\n{text}\n")
-
+                if title is None and page_url == url:
                     soup = BeautifulSoup(html, 'html.parser')
-                    for a in soup.find_all('a', href=True):
-                        href = a['href']
-                        if is_internal_link(page_url, href, base_path_prefix):
-                            clean = normalize_url(page_url, href)
-                            if clean and clean not in visited and clean not in queue and clean not in new_links:
-                                new_links.append(clean)
+                    tag = soup.find('title')
+                    title = tag.text.strip() if tag else None
 
-                    if progress_callback:
-                        progress_callback(fetched, len(visited))
+                text = extract_text_html(html)
+                if text.strip():
+                    pages_text.append(f"=== {page_url} ===\n{text}\n")
+
+                soup = BeautifulSoup(html, 'html.parser')
+                for a in soup.find_all('a', href=True):
+                    if _is_internal(page_url, a['href'], prefix):
+                        clean = _normalize_url(page_url, a['href'])
+                        if clean and clean not in visited and clean not in queue and clean not in new_links:
+                            new_links.append(clean)
+
+                if progress_callback:
+                    progress_callback(fetched, len(visited))
 
             queue.extend(new_links)
 
@@ -158,10 +198,12 @@ async def crawl_website_async(url: str, max_pages: int = None, max_chars: int = 
     if max_chars and len(full_text) > max_chars:
         full_text = full_text[:max_chars] + "\n\n... (truncated)"
 
-    return full_text, extract_title(url)
+    return full_text, title or urlparse(url).netloc
 
 
-def generate_skill(name: str, text: str, output_dir: str = "output"):
+# ── Skill generation ─────────────────────────────────────────────────────────
+
+def generate_skill(name: str, description: str, text: str, output_dir: str = "output"):
     print(f"Loading embedding model: {EMBED_MODEL_NAME}")
     model = SentenceTransformer(EMBED_MODEL_NAME)
 
@@ -169,8 +211,8 @@ def generate_skill(name: str, text: str, output_dir: str = "output"):
         print("Error: No text content extracted")
         sys.exit(1)
 
-    print(f"Extracted {len(text)} characters")
-    print("Generating chunks...")
+    print(f"Extracted {len(text):,} characters")
+    print("Chunking text...")
     chunks = chunk_text(text)
     print(f"Created {len(chunks)} chunks")
 
@@ -178,73 +220,93 @@ def generate_skill(name: str, text: str, output_dir: str = "output"):
     embeddings = model.encode(chunks, convert_to_numpy=True).tolist()
 
     safe_name = re.sub(r'[^\w\-_. ]', '_', name)
-    skill_dir = os.path.join(output_dir, f"{safe_name}_skills")
-    os.makedirs(skill_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
-    skill_data = {
-        "name": name,
-        "type": "rag",
-        "generated": datetime.now().isoformat(),
-        "chunks": [{"index": i, "content": chunk, "embedding": emb} for i, (chunk, emb) in enumerate(zip(chunks, embeddings))]
-    }
+    knowledge = "\n\n---\n\n".join(chunks)
 
-    md_content = f"# {name}\n\n" + "\n\n---\n\n".join(chunks)
-    with open(os.path.join(skill_dir, f"{safe_name}.md"), "w", encoding="utf-8") as f:
-        f.write(md_content)
+    # ── .skill (ZIP + SKILL.md — Claude-compatible) ──
+    skill_md = f"---\nname: {name}\ndescription: {description}\n---\n\n{knowledge}\n"
+    skill_path = os.path.join(output_dir, f"{safe_name}.skill")
+    with zipfile.ZipFile(skill_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("SKILL.md", skill_md)
+    print(f"  Created: {safe_name}.skill  (Claude-compatible ZIP)")
+
+    # ── .md (portable markdown) ──
+    md_path = os.path.join(output_dir, f"{safe_name}.md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(f"# {name}\n\n{description}\n\n---\n\n{knowledge}\n")
     print(f"  Created: {safe_name}.md")
 
-    with open(os.path.join(skill_dir, f"{safe_name}.json"), "w", encoding="utf-8") as f:
-        json.dump(skill_data, f, indent=2)
+    # ── .json (full data with embeddings) ──
+    json_path = os.path.join(output_dir, f"{safe_name}.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "name": name,
+            "description": description,
+            "type": "rag",
+            "generated": datetime.now().isoformat(),
+            "chunks": [{"index": i, "content": c, "embedding": e} for i, (c, e) in enumerate(zip(chunks, embeddings))],
+        }, f, indent=2)
     print(f"  Created: {safe_name}.json")
 
-    skill_lines = [
-        "SKILL METADATA",
-        "============",
-        f"name: {name}",
-        "type: rag",
-        f"generated: {datetime.now().isoformat()}",
-        "",
-        "KNOWLEDGE BASE (with embeddings)",
-        "============",
-        "",
-    ]
-    for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
-        skill_lines.extend([
-            "---",
-            f"CHUNK #{i+1}",
-            f"EMBEDDING: {json.dumps(emb)}",
-            "---",
-            chunk,
-            "",
-        ])
-    skill_text = "\n".join(skill_lines)
+    # ── Agent exports ──
+    agents_dir = os.path.join(output_dir, "agent-exports")
+    os.makedirs(agents_dir, exist_ok=True)
+    for agent_key, filename in AGENT_CONFIGS.items():
+        if agent_key == "systemprompt":
+            content = (
+                f"You have access to the following knowledge base: {name}\n\n"
+                f"{description}\n\n"
+                f"{'=' * 60}\n\n{knowledge}"
+            )
+        else:
+            content = (
+                f"# {name}\n\n> {description}\n\n"
+                f"## Instructions\n\nYou have access to the following knowledge base. "
+                f"Use it to answer questions and provide accurate information related to this topic. "
+                f"Always ground your responses in this content.\n\n"
+                f"## Knowledge Base\n\n{knowledge}\n"
+            )
+        export_path = os.path.join(agents_dir, f"{safe_name}-{filename}")
+        with open(export_path, "w", encoding="utf-8") as f:
+            f.write(content)
 
-    with open(os.path.join(skill_dir, f"{safe_name}.skill"), "w", encoding="utf-8") as f:
-        f.write(skill_text)
-    print(f"  Created: {safe_name}.skill")
+    print(f"  Created: agent-exports/ ({len(AGENT_CONFIGS)} agent formats)")
+    print(f"\nAll files saved to: {output_dir}/")
+    return output_dir
 
-    print(f"\nSkill files generated in: {skill_dir}")
-    return skill_dir
 
+# ── Entry point ──────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="AI Skill Generator CLI - Convert PDFs or URLs to AI skills")
-    parser.add_argument("input", help="Path to PDF file or URL to crawl")
+    parser = argparse.ArgumentParser(
+        description="AI Skill Generator CLI — Convert PDFs or URLs to AI skill files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  ai-skill-generator document.pdf
+  ai-skill-generator https://docs.example.com/en/ -o ./skills
+  ai-skill-generator https://hacktricks.wiki/en/ --max-pages 200
+  ai-skill-generator document.pdf --description "Security controls reference"
+        """
+    )
+    parser.add_argument("input", help="Path to a PDF file or a URL to crawl")
     parser.add_argument("-o", "--output", default="output", help="Output directory (default: output)")
-    parser.add_argument("-m", "--max-pages", type=int, default=None, help="Max pages to crawl for URLs (default: unlimited)")
-    parser.add_argument("-c", "--max-chars", type=int, default=None, help="Max characters to extract (default: unlimited)")
+    parser.add_argument("-d", "--description", default="", help="Short description of the skill")
+    parser.add_argument("-m", "--max-pages", type=int, default=None, help="Max pages to crawl for URLs")
+    parser.add_argument("-c", "--max-chars", type=int, default=None, help="Max characters to extract")
 
     args = parser.parse_args()
-
     is_url = args.input.startswith(("http://", "https://"))
 
     if is_url:
-        print(f"Extracting content from URL: {args.input}")
+        print(f"Crawling: {args.input}")
         def progress(fetched, visited):
-            print(f"  Crawled {fetched} pages, discovered {visited} links...", end='\r')
+            print(f"  Crawled {fetched} pages ({visited} discovered)...", end='\r')
         text, title = asyncio.run(crawl_website_async(args.input, args.max_pages, args.max_chars, progress))
         print()
         name = title
+        description = args.description or f"Knowledge base extracted from {args.input}"
     else:
         if not os.path.exists(args.input):
             print(f"Error: File not found: {args.input}")
@@ -255,15 +317,16 @@ def main():
         print(f"Extracting text from: {args.input}")
         text = extract_text_pdf(args.input)
         name = os.path.splitext(os.path.basename(args.input))[0]
+        description = args.description or f"Knowledge base extracted from {os.path.basename(args.input)}"
 
     if not text.strip():
-        print("Error: Could not extract text from input")
+        print("Error: Could not extract any text from input")
         sys.exit(1)
 
     try:
-        generate_skill(name, text, args.output)
+        generate_skill(name, description, text, args.output)
     except KeyboardInterrupt:
-        print("\nCancelled by user")
+        print("\nCancelled.")
         sys.exit(130)
     except Exception as e:
         print(f"Error: {e}")

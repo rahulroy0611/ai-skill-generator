@@ -1,267 +1,354 @@
-# AI Skill Generator
+<div align="center">
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11+-blue?style=flat&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/React-18-blue?style=flat&logo=react&logoColor=white" alt="React">
-  <img src="https://img.shields.io/badge/FastAPI-0.109+-blue?style=flat&logo=fastapi&logoColor=white" alt="FastAPI">
-  <img src="https://img.shields.io/badge/Docker-Ready-blue?style=flat&logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/PostgreSQL-14+-blue?style=flat&logo=postgresql&logoColor=white" alt="PostgreSQL">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="License">
-</p>
+# ⚡ AI Skill Generator
 
-> 🎯 Convert documents and web content into reusable AI skills with embeddings for semantic search.
+**Turn any PDF or website into an AI skill file in seconds.**
 
-**Note:** This project does not require opencode to run. It's a standalone web application.
+Upload a document or paste a URL → get ready-to-use skill files for Claude, Cursor, Copilot, OpenCode, Windsurf, Cline, Aider and more.
 
-## ✨ Features
+[![Release](https://img.shields.io/github/v/release/rahulroy0611/pdf-to-skill?style=flat-square&color=6366f1)](../../releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/rahulroy0611/pdf-to-skill/build-cli.yml?style=flat-square&label=CLI%20build)](../../actions/workflows/build-cli.yml)
+[![License](https://img.shields.io/github/license/rahulroy0611/pdf-to-skill?style=flat-square&color=10b981)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 
-- 📤 **Upload PDFs** - Drag & drop PDF files
-- 🌐 **Crawl Websites** - Extract content from web pages to create skills (bulk or single page)
-- 🤖 **AI Extraction** - Automatic knowledge extraction with embeddings (local or API-based)
-- 💬 **Query Skills** - Ask questions using RAG
-- 📥 **Download Skills** - Export in `.skill`, `.md`, or `.json` formats
-- 🗑️ **Delete Skills** - Manage your skills easily
-- 🐳 **Docker Ready** - One-command deployment
-- ⚡ **CLI Tool** - Generate skills from PDF files or URLs without running the server
+<br/>
 
-## 🚀 Quick Start
+[**Download CLI**](../../releases/latest) · [**Quick Start**](#-quick-start) · [**API Docs**](#-api-reference) · [**Export Formats**](#-export-formats)
 
-### Docker (Recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/ai-skill-generator.git
-cd ai-skill-generator
-
-# Copy environment template
-cp .env.sample .env
-# Edit .env with your settings (optional - defaults work out of the box)
-
-# Start all services
-docker-compose up --build
-```
-
-Then open:
-- 🌐 **Frontend**: http://localhost
-- 🔌 **API**: http://localhost:8000
+</div>
 
 ---
 
-### Local Development
+## ✨ What it does
 
-#### 1️⃣ Backend
+```
+PDF / Website URL
+       │
+       ▼
+┌─────────────────────────────────────────────┐
+│         AI Skill Generator                  │
+│                                             │
+│  1. Extract text  →  chunk  →  embed        │
+│  2. Store in PostgreSQL + pgvector          │
+│  3. Export to any AI tool format            │
+└─────────────────────────────────────────────┘
+       │
+       ▼
+ .skill  │  AGENTS.md  │  .cursorrules  │  .json  │  …
+```
+
+| | Feature |
+|---|---|
+| 📄 | **PDF → Skill** — extract, chunk and embed any PDF |
+| 🌐 | **Website → Skill** — full-site crawler with sitemap discovery |
+| 🔍 | **RAG queries** — ask questions, get answers grounded in your docs |
+| 📦 | **10 export formats** — one click for every major AI coding tool |
+| 🖥️ | **CLI binary** — single executable, no Python install needed |
+| 🔌 | **REST API** — plug into any pipeline or agent |
+
+---
+
+## 📦 Export formats
+
+> One skill, every tool. Export once, use anywhere.
+
+| Format | Works with | Output file |
+|:---|:---|:---|
+| 🟣 `.skill` | **Claude.ai** | `name.skill` — ZIP + SKILL.md |
+| 🟢 `AGENTS.md` | **OpenCode · Codex** | `name-AGENTS.md` |
+| 🔵 `.cursorrules` | **Cursor** | `name-.cursorrules` |
+| ⚫ `copilot-instructions.md` | **GitHub Copilot** | `name-copilot-instructions.md` |
+| 🌊 `.windsurfrules` | **Windsurf** | `name-.windsurfrules` |
+| 🔴 `.clinerules` | **Cline** | `name-.clinerules` |
+| 🟡 `CONVENTIONS.md` | **Aider** | `name-CONVENTIONS.md` |
+| ⚪ `system-prompt.txt` | **Any LLM API** | `name-system-prompt.txt` |
+| 📝 `.md` | **Universal** | `name.md` |
+| 🗄️ `.json` | **Raw + embeddings** | `name.json` |
+
+---
+
+## 🚀 Quick start
+
+### Option A — Docker (recommended)
 
 ```bash
+git clone https://github.com/rahulroy0611/pdf-to-skill.git
+cd pdf-to-skill
+cp backend/.env.sample .env
+# edit .env — add your DB password and LLM API key
+docker compose up -d
+```
+
+Open **http://localhost** in your browser. Done.
+
+### Option B — Manual
+
+> **Requirements:** Python 3.11+ · Node.js 18+ · PostgreSQL 16+
+
+```bash
+# 1. Backend
 cd backend
-
-# Create virtual environment
-python -m venv venv
-
-# Activate (Windows)
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
-
-# Install dependencies
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.sample .env                                # fill in your values
+uvicorn app.main:app --reload --port 8000
 
-# Configure environment
-copy .env.sample .env
-# Edit .env with your database URL
-
-# Run server
-python -m uvicorn app.main:app --port 8000
-```
-
-#### 2️⃣ Frontend
-
-```bash
+# 2. Frontend  (new terminal)
 cd frontend
-
-# Install dependencies
-npm install
-
-# Run development server
-npm run dev
+npm install && npm run dev
 ```
-
-Open http://localhost:5173
 
 ---
 
-## ⚡ CLI Tool
-
-Standalone CLI to generate skills from PDFs or URLs without running the web server.
+## 🖥️ CLI tool
 
 ### Download
 
-Get pre-built binaries from [GitHub Releases](https://github.com/YOUR_USERNAME/ai-skill-generator/releases/latest):
-- `ai-skill-generator-windows-x64.exe` - Windows
-- `ai-skill-generator-linux-x64` - Linux
+Grab the latest binary from [**GitHub Releases**](../../releases/latest) — no Python needed.
+
+| Platform | Download |
+|:---|:---|
+| 🪟 Windows | `ai-skill-generator-windows-x64.exe` |
+| 🐧 Linux | `ai-skill-generator-linux-x64` |
+
+```bash
+# Linux — one-time setup
+chmod +x ai-skill-generator-linux-x64
+mv ai-skill-generator-linux-x64 /usr/local/bin/ai-skill-generator
+```
 
 ### Usage
 
 ```bash
-# Generate skill from PDF
-ai-skill-generator sample.pdf
+# Convert a PDF
+ai-skill-generator resume.pdf
 
-# Generate skill from URL (crawls entire website)
-ai-skill-generator https://docs.example.com
+# Crawl a full documentation site
+ai-skill-generator https://docs.example.com/en/
 
-# Custom output directory
-ai-skill-generator sample.pdf -o my_output
+# Custom output folder + description
+ai-skill-generator report.pdf -o ./skills -d "Q4 security audit report"
 
-# Limit crawling pages
-ai-skill-generator https://example.com -m 50
+# Limit crawl to 200 pages
+ai-skill-generator https://hacktricks.wiki/en/ --max-pages 200
 ```
 
-### Output
+### Flags
 
-Generates `output/<name>_skills/` directory with:
-- `name.md` - Plain text markdown
-- `name.json` - Full data with embeddings
-- `name.skill` - Text + vector embeddings for AI agents
+| Flag | Description | Default |
+|:---|:---|:---|
+| `input` | PDF path or URL | required |
+| `-o, --output` | Output directory | `./output` |
+| `-d, --description` | Skill description | auto |
+| `-m, --max-pages` | Max pages to crawl | unlimited |
+| `-c, --max-chars` | Max characters | unlimited |
 
-### Build from Source
+### Output structure
+
+```
+output/
+├── 📦 MySkill.skill                       ← Claude.ai (ZIP + SKILL.md)
+├── 📝 MySkill.md                          ← Universal markdown
+├── 🗄️  MySkill.json                       ← Full data + embeddings
+└── agent-exports/
+    ├── MySkill-AGENTS.md                  ← OpenCode / Codex
+    ├── MySkill-.cursorrules               ← Cursor
+    ├── MySkill-copilot-instructions.md    ← GitHub Copilot
+    ├── MySkill-.windsurfrules             ← Windsurf
+    ├── MySkill-.clinerules                ← Cline
+    ├── MySkill-CONVENTIONS.md             ← Aider
+    └── MySkill-system-prompt.txt          ← Any LLM API
+```
+
+### Build from source
 
 ```bash
 cd backend
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install pyinstaller pdfplumber sentence-transformers beautifulsoup4 lxml httpx numpy
+
+# Linux
+pyinstaller --onefile --console --strip --name ai-skill-generator cli.py
 
 # Windows
-build_cli.bat
-
-# Linux/Mac
-chmod +x build_cli.sh && ./build_cli.sh
+pyinstaller --onefile --console --name ai-skill-generator cli.py
 ```
 
 ---
 
-## 📁 Project Structure
+## 🤖 Using your skill files
 
+<details>
+<summary><b>Claude.ai</b></summary>
+
+1. Go to **claude.ai → Skills → Upload skill**
+2. Upload the `.skill` file
+
+</details>
+
+<details>
+<summary><b>OpenCode / Codex</b></summary>
+
+```bash
+# Project-level
+cp "MySkill-AGENTS.md" your-project/AGENTS.md
+
+# Global (applies to all projects)
+cp "MySkill-AGENTS.md" ~/.config/opencode/AGENTS.md
 ```
-ai-skill-generator/
-├── .github/
-│   └── workflows/
-│       └── build-cli.yml          # GitHub Actions for CLI builds
-├── 🐳 docker-compose.yml          # Docker orchestration
-├── 📝 README.md                    # This file
-│
-├── 🐍 backend/
-│   ├── 📂 app/                    # Application code
-│   │   ├── database.py            # SQLAlchemy models
-│   │   ├── main.py                # API endpoints
-│   │   └── services.py            # PDF extraction, embeddings
-│   ├── 📂 database/
-│   │   └── schema.sql             # Database schema
-│   ├── 🐳 Dockerfile               # Backend container
-│   ├── 📄 cli.py                   # CLI tool source
-│   ├── 📄 requirements.txt
-│   └── 📄 .env.sample             # Environment template
-│
-└── ⚛️ frontend/
-    ├── 📂 src/                    # React source
-    ├── 🐳 Dockerfile              # Frontend container
-    ├── 📄 nginx.conf              # Nginx config
-    └── 📄 package.json
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+```bash
+cp "MySkill-.cursorrules" your-project/.cursorrules
 ```
+
+</details>
+
+<details>
+<summary><b>GitHub Copilot</b></summary>
+
+```bash
+mkdir -p .github
+cp "MySkill-copilot-instructions.md" .github/copilot-instructions.md
+```
+
+</details>
+
+<details>
+<summary><b>Windsurf</b></summary>
+
+```bash
+cp "MySkill-.windsurfrules" your-project/.windsurfrules
+```
+
+</details>
+
+<details>
+<summary><b>Cline</b></summary>
+
+```bash
+cp "MySkill-.clinerules" your-project/.clinerules
+```
+
+</details>
+
+<details>
+<summary><b>Aider</b></summary>
+
+```bash
+aider --read MySkill-CONVENTIONS.md
+```
+
+</details>
+
+<details>
+<summary><b>Any LLM API</b></summary>
+
+Pass `system-prompt.txt` contents as your system prompt.
+
+```python
+with open("MySkill-system-prompt.txt") as f:
+    system_prompt = f.read()
+```
+
+</details>
 
 ---
 
-## 🔌 API Endpoints
+## 🔌 API reference
+
+> Base URL: `http://localhost:8000`
 
 | Method | Endpoint | Description |
-|:------:|----------|-------------|
-| `POST` | `/upload` | 📤 Upload PDF to create skill |
-| `POST` | `/crawl` | 🌐 Crawl website to create skill |
-| `GET` | `/skills` | 📋 List all skills |
-| `GET` | `/skills/{id}` | 🔍 Get skill details |
-| `POST` | `/skills/{id}/query` | 💬 Query a skill |
-| `GET` | `/skills/{id}/download` | 📥 Download skill |
-| `DELETE` | `/skills/{id}` | 🗑️ Delete a skill |
-| `GET` | `/health` | ❤️ Health check |
+|:---|:---|:---|
+| `POST` | `/upload` | Upload a PDF |
+| `POST` | `/upload-website` | Crawl a URL |
+| `GET` | `/skills` | List all skills |
+| `POST` | `/skills/{id}/query` | RAG query |
+| `GET` | `/skills/{id}/download` | Download `.skill` / `.md` / `.json` |
+| `GET` | `/skills/{id}/export?agent=` | Export for AI agent |
+| `DELETE` | `/skills/{id}` | Delete a skill |
+| `GET` | `/crawl-progress` | Live crawl status |
+| `GET` | `/health` | Health check |
 
----
+**Agent values:** `opencode` · `codex` · `cursor` · `copilot` · `windsurf` · `cline` · `aider` · `systemprompt`
 
-## 📦 Skill Formats
-
-| Format | Description | Best For |
-|:------:|-------------|----------|
-| `.skill` | 📝 Text + embeddings | AI agents for semantic search |
-| `.md` | 📄 Plain text | Copy-paste to Claude/ChatGPT |
-| `.json` | 📊 Full data | RAG systems, programmatic use |
-
----
-
-## 🐳 Docker Commands
+#### Query example
 
 ```bash
-# 🚀 Start all services
-docker-compose up
+curl -X POST http://localhost:8000/skills/1/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What are the main security controls?"}'
+```
 
-# 🔄 Start in background
-docker-compose up -d
+#### Export example
 
-# 📜 View logs
-docker-compose logs -f
-
-# 🛑 Stop all services
-docker-compose down
-
-# 🔨 Rebuild containers
-docker-compose up --build
+```bash
+curl "http://localhost:8000/skills/1/export?agent=cursor" -o .cursorrules
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## ⚙️ Configuration
 
-Copy the template before running:
+```env
+# backend/.env
 
-```bash
-cp .env.sample .env
+# PostgreSQL
+DATABASE_URL=postgresql+asyncpg://postgres:your_password@localhost:5432/pdftoskill
+
+# LLM — used for RAG answers (optional, get key at platform.minimax.ai)
+LLM_API_KEY=
+LLM_API_BASE=https://api.minimax.chat/v1
+
+# Embedding model (default is fine for most use cases)
+EMBED_MODEL_NAME=all-MiniLM-L6-v2
 ```
 
-| Variable | Description | Default |
-|:---------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://postgres:postgres@db:5432/ai_skill_generator` |
-| `LLM_API_KEY` | MiniMax API key (optional — required only for `/query` endpoint) | - |
-| `LLM_API_BASE` | LLM API base URL | `https://api.minimax.chat/v1` |
-| `EMBED_MODEL_NAME` | Embedding model (local: `all-MiniLM-L6-v2`, or API: `text-embedding-3-small`) | `all-MiniLM-L6-v2` |
-| `EMBED_API_KEY` | API key for external embedding provider (e.g., OpenAI) | - |
-| `EMBED_API_BASE` | API base URL for external embeddings (leave empty for local model) | - |
-
-**Note:** If using an API-based embedding model, `EMBED_API_KEY` and `EMBED_API_BASE` are required. If using the local default model, no additional setup is needed — the model downloads automatically on first use.
+> Without `LLM_API_KEY` the app still generates all skill files and embeddings. Only RAG query answers fall back to a stub.
 
 ---
 
-## 🤝 Contributing
+## 🏗️ Tech stack
 
-1. 🍴 Fork the repository
-2. 🌿 Create a feature branch
-3. 📝 Make your changes
-4. ✅ Run tests
-5. 📤 Submit a pull request
+<div align="center">
 
----
+| Layer | Tech |
+|:---|:---|
+| Backend | FastAPI · Python 3.11 · Uvicorn |
+| Database | PostgreSQL 16 · pgvector |
+| Embeddings | sentence-transformers · all-MiniLM-L6-v2 |
+| LLM | MiniMax API (swappable via env) |
+| Crawler | httpx · BeautifulSoup · sitemap.xml |
+| Frontend | React 18 · Vite · Tailwind CSS |
+| CLI | PyInstaller standalone binary |
+| CI/CD | GitHub Actions |
+| Infra | Docker · Docker Compose |
 
-## 📜 License
-
-<p align="center">
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License">
-</p>
-
----
-
-## 🙏 Acknowledgments
-
-- [FastAPI](https://fastapi.tiangolo.com/) - Modern web framework
-- [Sentence Transformers](https://sbert.net/) - Embedding models
-- [pgvector](https://github.com/pgvector/pgvector) - Vector similarity search
-- [React](https://react.dev/) - UI library
-- [Tailwind CSS](https://tailwindcss.com/) - Styling
+</div>
 
 ---
 
-<p align="center">
-  Made with ❤️ for AI enthusiasts
-</p>
+## 📬 Releases
+
+Binaries are built and attached to every GitHub Release automatically via [GitHub Actions](.github/workflows/build-cli.yml).
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+# Create a Release on GitHub → binaries attach automatically
+```
+
+---
+
+<div align="center">
+
+Made with ❤️ by [Rahul Roy](https://github.com/rahulroy0611)
+
+</div>

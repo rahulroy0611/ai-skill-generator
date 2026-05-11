@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 
@@ -8,8 +8,10 @@ function App() {
   const [skills, setSkills] = useState([])
   const [file, setFile] = useState(null)
   const [websiteUrl, setWebsiteUrl] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
+  const [pdfUploading, setPdfUploading] = useState(false)
+  const [pdfProgress, setPdfProgress] = useState(0)
+  const [websiteUploading, setWebsiteUploading] = useState(false)
+  const [websiteProgress, setWebsiteProgress] = useState(0)
   const [statusMessage, setStatusMessage] = useState('')
   const [selectedSkill, setSelectedSkill] = useState(null)
   const [query, setQuery] = useState('')
@@ -17,10 +19,33 @@ function App() {
   const [querying, setQuerying] = useState(false)
   const [notification, setNotification] = useState(null)
   const [activeTab, setActiveTab] = useState('upload')
+  const [exportDropdown, setExportDropdown] = useState(null)
+  const exportRef = useRef(null)
+
+  const EXPORT_AGENTS = [
+    { key: 'opencode',     label: 'OpenCode',         file: 'AGENTS.md' },
+    { key: 'codex',        label: 'Codex',            file: 'AGENTS.md' },
+    { key: 'cursor',       label: 'Cursor',           file: '.cursorrules' },
+    { key: 'copilot',      label: 'GitHub Copilot',   file: 'copilot-instructions.md' },
+    { key: 'windsurf',     label: 'Windsurf',         file: '.windsurfrules' },
+    { key: 'cline',        label: 'Cline',            file: '.clinerules' },
+    { key: 'aider',        label: 'Aider',            file: 'CONVENTIONS.md' },
+    { key: 'systemprompt', label: 'System Prompt',    file: 'system-prompt.txt' },
+  ]
 
   useEffect(() => {
     fetchSkills()
   }, [])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) {
+        setExportDropdown(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [exportDropdown])
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type })
@@ -53,8 +78,8 @@ function App() {
 
   const uploadPdf = async () => {
     if (!file) return
-    setUploading(true)
-    setUploadProgress(0)
+    setPdfUploading(true)
+    setPdfProgress(0)
 
     const formData = new FormData()
     formData.append('file', file)
@@ -63,7 +88,7 @@ function App() {
       await axios.post(`${API_URL}/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (e) => {
-          setUploadProgress(Math.round((e.loaded * 100) / e.total))
+          setPdfProgress(Math.round((e.loaded * 100) / e.total))
         },
       })
       setFile(null)
@@ -72,14 +97,15 @@ function App() {
     } catch (err) {
       showNotification('Upload failed: ' + (err.response?.data?.detail || 'Unknown error'), 'error')
     } finally {
-      setUploading(false)
+      setPdfUploading(false)
+      setPdfProgress(0)
     }
   }
 
   const uploadWebsite = async () => {
     if (!websiteUrl) return
-    setUploading(true)
-    setUploadProgress(0)
+    setWebsiteUploading(true)
+    setWebsiteProgress(0)
     setStatusMessage('Initializing crawler...')
 
     let pollInterval = setInterval(async () => {
@@ -88,7 +114,7 @@ function App() {
         const progress = res.data
         if (progress.in_progress) {
           setStatusMessage(`Crawling: ${progress.visited} pages`)
-          setUploadProgress(Math.min(95, progress.visited * 5))
+          setWebsiteProgress(Math.min(95, progress.visited * 5))
         }
       } catch (err) {
         console.error('Progress poll failed:', err)
@@ -96,8 +122,8 @@ function App() {
     }, 2000)
 
     try {
-      const res = await axios.post(`${API_URL}/upload-website`, { url: websiteUrl })
-      setUploadProgress(100)
+      await axios.post(`${API_URL}/upload-website`, { url: websiteUrl })
+      setWebsiteProgress(100)
       setWebsiteUrl('')
       fetchSkills()
       showNotification('Website skill created successfully')
@@ -105,10 +131,10 @@ function App() {
       showNotification('Failed: ' + (err.response?.data?.detail || 'Unknown error'), 'error')
     } finally {
       clearInterval(pollInterval)
-      setUploading(false)
+      setWebsiteUploading(false)
       setTimeout(() => {
         setStatusMessage('')
-        setUploadProgress(0)
+        setWebsiteProgress(0)
       }, 2000)
     }
   }
@@ -151,6 +177,17 @@ function App() {
     } catch (err) {
       showNotification('Delete failed', 'error')
     }
+  }
+
+  const exportSkill = (skillId, agentKey) => {
+    const link = document.createElement('a')
+    link.href = `${API_URL}/skills/${skillId}/export?agent=${agentKey}`
+    link.download = ''
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    setExportDropdown(null)
+    showNotification(`Exported for ${EXPORT_AGENTS.find(a => a.key === agentKey)?.label}`)
   }
 
   return (
@@ -280,12 +317,24 @@ function App() {
                         </label>
                       </div>
                       {file && (
+                        <>
+                        {pdfUploading && (
+                          <div className="mt-3 space-y-1">
+                            <div className="flex justify-between text-xs text-slate-500">
+                              <span>Uploading...</span>
+                              <span>{pdfProgress}%</span>
+                            </div>
+                            <div className="w-full bg-slate-800 rounded-full h-1">
+                              <div className="bg-indigo-500 h-1 rounded-full transition-all duration-300" style={{ width: `${pdfProgress}%` }} />
+                            </div>
+                          </div>
+                        )}
                         <button
                           onClick={uploadPdf}
-                          disabled={uploading}
+                          disabled={pdfUploading}
                           className="mt-4 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                         >
-                          {uploading ? (
+                          {pdfUploading ? (
                             <>
                               <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -295,6 +344,7 @@ function App() {
                             </>
                           ) : 'Create Skill'}
                         </button>
+                        </>
                       )}
                     </div>
 
@@ -313,10 +363,10 @@ function App() {
                         </div>
                         <button
                           onClick={uploadWebsite}
-                          disabled={uploading || !websiteUrl}
+                          disabled={websiteUploading || !websiteUrl}
                           className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                         >
-                          {uploading ? (
+                          {websiteUploading ? (
                             <>
                               <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -326,14 +376,14 @@ function App() {
                             </>
                           ) : 'Extract & Create'}
                         </button>
-                        {uploading && (
+                        {websiteUploading && (
                           <div className="space-y-2">
                             <div className="flex justify-between text-xs text-slate-500">
                               <span>{statusMessage}</span>
-                              <span>{uploadProgress}%</span>
+                              <span>{websiteProgress}%</span>
                             </div>
                             <div className="w-full bg-slate-800 rounded-full h-1">
-                              <div className="bg-indigo-500 h-1 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                              <div className="bg-indigo-500 h-1 rounded-full transition-all duration-300" style={{ width: `${websiteProgress}%` }} />
                             </div>
                           </div>
                         )}
@@ -379,7 +429,7 @@ function App() {
                                   <span className="px-2 py-0.5 bg-slate-800 text-slate-400 text-xs rounded uppercase">{skill.skill_type}</span>
                                 </div>
                                 <p className="text-sm text-slate-500 mt-1">
-                                  {new Date(skill.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                  {new Date(skill.created_at).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -395,6 +445,33 @@ function App() {
                                 >
                                   .md
                                 </button>
+                                {/* Export for AI agents dropdown */}
+                                <div className="relative" ref={exportDropdown === skill.id ? exportRef : null}>
+                                  <button
+                                    onClick={() => setExportDropdown(exportDropdown === skill.id ? null : skill.id)}
+                                    className="px-3 py-1.5 bg-indigo-900/50 hover:bg-indigo-800/60 text-indigo-300 text-xs rounded transition-colors flex items-center gap-1"
+                                  >
+                                    Export
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
+                                  {exportDropdown === skill.id && (
+                                    <div className="absolute right-0 top-8 z-50 w-52 bg-slate-900 border border-slate-700 rounded-lg shadow-xl py-1">
+                                      <p className="px-3 py-1.5 text-xs text-slate-500 uppercase tracking-wider font-medium border-b border-slate-700 mb-1">Export for AI Agent</p>
+                                      {EXPORT_AGENTS.map((agent) => (
+                                        <button
+                                          key={agent.key}
+                                          onClick={() => exportSkill(skill.id, agent.key)}
+                                          className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center justify-between"
+                                        >
+                                          <span>{agent.label}</span>
+                                          <span className="text-xs text-slate-500 font-mono">{agent.file}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                                 <button
                                   onClick={() => deleteSkill(skill.id, skill.name)}
                                   className="px-3 py-1.5 bg-red-950/50 hover:bg-red-900/50 text-red-400 text-xs rounded transition-colors"
@@ -483,7 +560,8 @@ function App() {
                             { method: 'POST', path: '/upload', desc: 'Upload PDF' },
                             { method: 'POST', path: '/upload-website', desc: 'Extract from URL' },
                             { method: 'DELETE', path: '/skills/{id}', desc: 'Delete skill' },
-                            { method: 'GET', path: '/skills/{id}/download', desc: 'Download skill file' },
+                                            { method: 'GET', path: '/skills/{id}/download', desc: 'Download skill file (.skill / .md / .json)' },
+                                            { method: 'GET', path: '/skills/{id}/export?agent=opencode', desc: 'Export for AI agent (opencode, codex, cursor, copilot, windsurf, cline, aider, systemprompt)' },
                           ].map((endpoint) => (
                             <div key={endpoint.path} className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
                               <span className={`px-2 py-0.5 text-xs font-medium rounded ${

@@ -1,7 +1,9 @@
 import json
 import os
+import tempfile
+import zipfile
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text, delete
@@ -85,10 +87,12 @@ async def upload_website(request: WebsiteInput):
         if not text or len(text.strip()) < 50:
             raise HTTPException(status_code=400, detail="Could not extract enough content from the website")
         
-        filename = f"{title}.txt"
-        
+        # Use crawl-returned title directly — avoids a redundant HTTP refetch
+        safe_title = title.replace("/", "_").replace("\\", "_") if title else "website"
+        filename = f"{safe_title}.txt"
+
         result = await skill_builder.build_skill(text.encode('utf-8'), filename, is_text=True)
-        
+
         crawl_progress["in_progress"] = False
         
         return UploadResponse(
@@ -139,85 +143,65 @@ async def query_skill(skill_id: int, request: SkillQuery):
 
 
 @app.get("/skills/{skill_id}/download")
-async def download_skill(skill_id: int, format: str = "skill"):
+async def download_skill(skill_id: int, background_tasks: BackgroundTasks, format: str = "skill"):
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Skill).where(Skill.id == skill_id))
         skill = result.scalar_one_or_none()
         if not skill:
             raise HTTPException(status_code=404, detail="Skill not found")
-        
+
         artifacts_result = await db.execute(
             select(SkillArtifact).where(SkillArtifact.skill_id == skill_id)
         )
         artifacts = artifacts_result.scalars().all()
-        
+
         all_content = [a.content.strip() for a in artifacts if a.content and a.content.strip()]
-        
+
         if not all_content:
             raise HTTPException(
-                status_code=400, 
-                detail="This PDF has no extractable text. It may be a scanned image. Please use a PDF with selectable text."
+                status_code=400,
+                detail=(
+                    "No content found for this skill. "
+                    "If it is a scanned PDF it may have no selectable text. "
+                    "If it is a tool/workflow skill, content chunks are not stored."
+                )
             )
-        
+
+        suffix_map = {"skill": ".skill", "md": ".md", "json": ".json"}
+        suffix = suffix_map.get(format, ".skill")
+
         if format == "skill":
-            skill_content = f"""SKILL METADATA
-================
+            # Claude requires .skill to be a ZIP archive containing SKILL.md with YAML frontmatter
+            description = skill.skill_metadata.get("description", "") if skill.skill_metadata else ""
+            knowledge_base = "\n\n---\n\n".join(all_content)
+            skill_md = f"""---
 name: {skill.name}
-type: {skill.skill_type}
-created: {skill.created_at.isoformat() if skill.created_at else 'N/A'}
-id: {skill.id}
-
-SKILL DESCRIPTION
-================
-{json.dumps(skill.skill_metadata, indent=2)}
-
-KNOWLEDGE BASE (with embeddings)
-=============
-"""
-            for i, a in enumerate(artifacts):
-                if a.content and a.content.strip():
-                    emb_str = json.dumps(a.embedding) if a.embedding else "[]"
-                    skill_content += f"""
+description: {description}
 ---
-CHUNK #{i+1}
-EMBEDDING: {emb_str}
----
-{a.content}
-"""
-            
-            skill_content += """
 
-===========================================
-END OF SKILL
-===========================================
-This skill contains text chunks and their vector embeddings.
-Use embeddings for semantic similarity search.
+{knowledge_base}
 """
-            
-            file_path = f"skill_{skill_id}.skill"
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(skill_content)
-            
-            return FileResponse(
-                file_path,
-                media_type="text/plain",
-                filename=f"{skill.name}.skill"
-            )
-        
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".skill")
+            tmp.close()
+            background_tasks.add_task(os.remove, tmp.name)
+            with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("SKILL.md", skill_md)
+            return FileResponse(tmp.name, media_type="application/zip", filename=f"{skill.name}.skill")
+
         elif format == "md":
-            md_content = f"# {skill.name}\n\nType: {skill.skill_type}\nCreated: {skill.created_at.isoformat() if skill.created_at else 'N/A'}\n\n---\n\n" + "\n\n---\n\n".join(all_content)
-            
-            file_path = f"skill_{skill_id}.md"
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(md_content)
-            
-            return FileResponse(
-                file_path,
-                media_type="text/plain",
-                filename=f"{skill.name}.md"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".md", mode="w", encoding="utf-8")
+            background_tasks.add_task(os.remove, tmp.name)
+            tmp.write(
+                f"# {skill.name}\n\nType: {skill.skill_type}\n"
+                f"Created: {skill.created_at.isoformat() if skill.created_at else 'N/A'}\n\n---\n\n"
+                + "\n\n---\n\n".join(all_content)
             )
-        
+            tmp.close()
+            return FileResponse(tmp.name, media_type="text/plain", filename=f"{skill.name}.md")
+
         # JSON format
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w", encoding="utf-8")
+        background_tasks.add_task(os.remove, tmp.name)
         skill_data = {
             "id": skill.id,
             "name": skill.name,
@@ -227,18 +211,11 @@ Use embeddings for semantic similarity search.
             "artifacts": [
                 {"chunk_index": a.chunk_index, "content": a.content, "embedding": a.embedding}
                 for a in artifacts
-            ]
+            ],
         }
-        
-        file_path = f"skill_{skill_id}.json"
-        with open(file_path, "w") as f:
-            json.dump(skill_data, f, indent=2)
-        
-        return FileResponse(
-            file_path,
-            media_type="application/json",
-            filename=f"{skill.name}.skill.json"
-        )
+        json.dump(skill_data, tmp)
+        tmp.close()
+        return FileResponse(tmp.name, media_type="application/json", filename=f"{skill.name}.skill.json")
 
 
 @app.delete("/skills/{skill_id}")
@@ -257,6 +234,75 @@ async def delete_skill(skill_id: int):
         await db.commit()
         
         return {"message": f"Skill '{skill.name}' deleted successfully"}
+
+
+AGENT_EXPORT_CONFIGS = {
+    "opencode":  {"filename": "AGENTS.md",                 "media_type": "text/plain"},
+    "codex":     {"filename": "AGENTS.md",                 "media_type": "text/plain"},
+    "cursor":    {"filename": ".cursorrules",              "media_type": "text/plain"},
+    "copilot":   {"filename": "copilot-instructions.md",   "media_type": "text/plain"},
+    "windsurf":  {"filename": ".windsurfrules",            "media_type": "text/plain"},
+    "cline":     {"filename": ".clinerules",               "media_type": "text/plain"},
+    "aider":     {"filename": "CONVENTIONS.md",            "media_type": "text/plain"},
+    "systemprompt": {"filename": "system-prompt.txt",      "media_type": "text/plain"},
+}
+
+
+@app.get("/skills/{skill_id}/export")
+async def export_skill(skill_id: int, background_tasks: BackgroundTasks, agent: str = "opencode"):
+    agent = agent.lower()
+    if agent not in AGENT_EXPORT_CONFIGS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown agent '{agent}'. Supported: {', '.join(AGENT_EXPORT_CONFIGS)}"
+        )
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Skill).where(Skill.id == skill_id))
+        skill = result.scalar_one_or_none()
+        if not skill:
+            raise HTTPException(status_code=404, detail="Skill not found")
+
+        artifacts_result = await db.execute(
+            select(SkillArtifact).where(SkillArtifact.skill_id == skill_id)
+        )
+        artifacts = artifacts_result.scalars().all()
+
+    all_content = [a.content.strip() for a in artifacts if a.content and a.content.strip()]
+    if not all_content:
+        raise HTTPException(status_code=400, detail="No content found in this skill.")
+
+    description = (skill.skill_metadata or {}).get("description", "AI-generated knowledge base skill.")
+    knowledge = "\n\n---\n\n".join(all_content)
+    config = AGENT_EXPORT_CONFIGS[agent]
+
+    if agent == "systemprompt":
+        content = (
+            f"You have access to the following knowledge base: {skill.name}\n\n"
+            f"{description}\n\n"
+            f"Use the information below to answer questions accurately.\n\n"
+            f"{'=' * 60}\n\n"
+            f"{knowledge}"
+        )
+    else:
+        content = (
+            f"# {skill.name}\n\n"
+            f"> {description}\n\n"
+            f"## Instructions\n\n"
+            f"You have access to the following knowledge base. "
+            f"Use it to answer questions, assist with tasks, and provide accurate information "
+            f"related to this topic. Always ground your responses in this content.\n\n"
+            f"## Knowledge Base\n\n"
+            f"{knowledge}\n"
+        )
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".md", mode="w", encoding="utf-8")
+    background_tasks.add_task(os.remove, tmp.name)
+    tmp.write(content)
+    tmp.close()
+
+    download_name = f"{skill.name}-{config['filename']}"
+    return FileResponse(tmp.name, media_type=config["media_type"], filename=download_name)
 
 
 @app.get("/")

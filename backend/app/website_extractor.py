@@ -170,6 +170,7 @@ class WebsiteExtractor:
 
         pages_text = []
         fetched = 0
+        title: Optional[str] = None
 
         async with httpx.AsyncClient() as client:
             # Seed from sitemap first for complete coverage
@@ -183,13 +184,13 @@ class WebsiteExtractor:
             while queue:
                 if self.max_pages and len(self.visited) >= self.max_pages:
                     break
-                
+
                 batch = queue[:20]
                 queue = queue[20:]
-                
+
                 tasks = [self._fetch_page(client, u) for u in batch]
                 results = await asyncio.gather(*tasks)
-                
+
                 new_links = []
                 for result in results:
                     if result:
@@ -198,29 +199,33 @@ class WebsiteExtractor:
                             continue
                         self.visited.add(page_url)
                         fetched += 1
-                        
+
+                        # Extract title from the start URL's HTML — no extra HTTP request needed
+                        if title is None and page_url == url:
+                            soup = BeautifulSoup(html, 'html.parser')
+                            tag = soup.find('title')
+                            title = tag.text.strip() if tag else None
+
                         text = self._extract_text_from_html(html)
                         if text.strip():
                             pages_text.append(f"=== {page_url} ===\n{text}\n")
-                        
+
                         links = self._extract_links(page_url, html)
                         for link in links:
                             if link not in self.visited:
                                 if link not in queue and link not in new_links:
                                     new_links.append(link)
-                        
+
                         if progress_callback:
                             progress_callback(fetched, len(self.visited))
-                
+
                 queue.extend(new_links)
-        
+
         full_text = '\n'.join(pages_text)
-        
+
         if self.max_chars and len(full_text) > self.max_chars:
             full_text = full_text[:self.max_chars] + "\n\n... (truncated)"
-        
-        title = self.get_title(url)
-        
+
         return full_text, title or url
 
     @staticmethod
@@ -228,13 +233,3 @@ class WebsiteExtractor:
         extractor = WebsiteExtractor(max_pages=max_pages, max_chars=max_chars)
         return asyncio.run(extractor.crawl_async(url, progress_callback))
     
-    @staticmethod
-    def get_title(url: str) -> Optional[str]:
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = httpx.get(url, headers=headers, timeout=10, follow_redirects=True)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            title = soup.find('title')
-            return title.text.strip() if title else None
-        except Exception:
-            return None
