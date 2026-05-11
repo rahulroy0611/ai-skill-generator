@@ -11,13 +11,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            name: windows-x64
             path: "backend/dist/ai-skill-generator.exe"
-            artifact: "ai-skill-generator-windows-x64.exe"
           - os: ubuntu-latest
-            name: linux-x64
             path: "backend/dist/ai-skill-generator"
-            artifact: "ai-skill-generator-linux-x64"
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -29,8 +25,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install pyinstaller pdfplumber sentence-transformers beautifulsoup4 httpx
+        run: pip install pyinstaller pdfplumber sentence-transformers beautifulsoup4 httpx
 
       - name: Build CLI
         run: |
@@ -38,33 +33,39 @@ jobs:
           pyinstaller --onefile --console --strip --name ai-skill-generator cli.py
 
       - name: Make Linux binary executable
-        if: matrix.name == 'linux-x64'
+        if: runner.os == 'Linux'
         run: chmod +x backend/dist/ai-skill-generator
 
       - name: Upload artifact
-        uses: actions/upload-asset@v1
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: ${{ runner.os }}-artifact
           path: ${{ matrix.path }}
 
   release:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: "*-artifact"
           path: artifacts
+          merge-multiple: true
 
-      - name: Display structure of downloaded files
-        run: ls -R artifacts
-
-      - name: Create Release Asset
+      - name: Rename artifacts
         run: |
-          cd artifacts
-          for dir in */; do
-            mv "$dir"*.exe ai-skill-generator-windows-x64.exe 2>/dev/null || true
-            mv "$dir"ai-skill-generator ai-skill-generator-linux-x64 2>/dev/null || true
-          done
+          mv Linux-artifact ai-skill-generator-linux-x64 || true
+          mv Windows-artifact ai-skill-generator-windows-x64.exe || true
+          chmod +x ai-skill-generator-linux-x64
           ls -la
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ai-skill-generator-windows-x64.exe
+            ai-skill-generator-linux-x64
