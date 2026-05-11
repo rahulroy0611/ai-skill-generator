@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="PDF to Skill API", lifespan=lifespan)
+app = FastAPI(title="AI Skill Generator API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -261,7 +261,7 @@ async def delete_skill(skill_id: int):
 
 @app.get("/")
 async def root():
-    return {"message": "PDF to Skill API is running"}
+    return {"message": "AI Skill Generator API is running"}
 
 
 @app.get("/health")

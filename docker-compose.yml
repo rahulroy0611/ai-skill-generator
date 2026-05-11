@@ -4,11 +4,9 @@ services:
   # PostgreSQL Database
   db:
     image: pgvector/pgvector:pg16
-    container_name: pdftoskill-db
+    container_name: ai-skill-generator-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: pdftoskill
+      POSTGRES_DB: ai_skill_generator
     ports:
       - "5432:5432"
     volumes:
@@ -24,7 +22,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: pdftoskill-backend
+    container_name: ai-skill-generator-backend
     ports:
       - "8000:8000"
     env_file:
@@ -39,7 +37,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: pdftoskill-frontend
+    container_name: ai-skill-generator-frontend
     ports:
       - "80:80"
     depends_on:

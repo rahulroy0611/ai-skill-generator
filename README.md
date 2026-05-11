@@ -1,4 +1,4 @@
-# 📄 PDF to Skill
+# AI Skill Generator
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11+-blue?style=flat&logo=python&logoColor=white" alt="Python">
@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="License">
 </p>
 
-> 🎯 Convert PDFs into reusable AI skills with embeddings for semantic search.
+> 🎯 Convert documents and web content into reusable AI skills with embeddings for semantic search.
 
 **Note:** This project does not require opencode to run. It's a standalone web application.
 
@@ -22,6 +22,7 @@
 - 📥 **Download Skills** - Export in `.skill`, `.md`, or `.json` formats
 - 🗑️ **Delete Skills** - Manage your skills easily
 - 🐳 **Docker Ready** - One-command deployment
+- ⚡ **CLI Tool** - Generate skills from PDF files or URLs without running the server
 
 ## 🚀 Quick Start
 
@@ -29,8 +30,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/pdftoskill.git
-cd pdftoskill
+git clone https://github.com/YOUR_USERNAME/ai-skill-generator.git
+cd ai-skill-generator
 
 # Copy environment template
 cp .env.sample .env
@@ -88,10 +89,60 @@ Open http://localhost:5173
 
 ---
 
+## ⚡ CLI Tool
+
+Standalone CLI to generate skills from PDFs or URLs without running the web server.
+
+### Download
+
+Get pre-built binaries from [GitHub Releases](https://github.com/YOUR_USERNAME/ai-skill-generator/releases/latest):
+- `ai-skill-generator-windows-x64.exe` - Windows
+- `ai-skill-generator-linux-x64` - Linux
+
+### Usage
+
+```bash
+# Generate skill from PDF
+ai-skill-generator sample.pdf
+
+# Generate skill from URL (crawls entire website)
+ai-skill-generator https://docs.example.com
+
+# Custom output directory
+ai-skill-generator sample.pdf -o my_output
+
+# Limit crawling pages
+ai-skill-generator https://example.com -m 50
+```
+
+### Output
+
+Generates `output/<name>_skills/` directory with:
+- `name.md` - Plain text markdown
+- `name.json` - Full data with embeddings
+- `name.skill` - Text + vector embeddings for AI agents
+
+### Build from Source
+
+```bash
+cd backend
+
+# Windows
+build_cli.bat
+
+# Linux/Mac
+chmod +x build_cli.sh && ./build_cli.sh
+```
+
+---
+
 ## 📁 Project Structure
 
 ```
-pdftoskill/
+ai-skill-generator/
+├── .github/
+│   └── workflows/
+│       └── build-cli.yml          # GitHub Actions for CLI builds
 ├── 🐳 docker-compose.yml          # Docker orchestration
 ├── 📝 README.md                    # This file
 │
@@ -103,6 +154,7 @@ pdftoskill/
 │   ├── 📂 database/
 │   │   └── schema.sql             # Database schema
 │   ├── 🐳 Dockerfile               # Backend container
+│   ├── 📄 cli.py                   # CLI tool source
 │   ├── 📄 requirements.txt
 │   └── 📄 .env.sample             # Environment template
 │
@@ -171,7 +223,7 @@ cp .env.sample .env
 
 | Variable | Description | Default |
 |:---------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://postgres:postgres@db:5432/pdftoskill` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://postgres:postgres@db:5432/ai_skill_generator` |
 | `LLM_API_KEY` | MiniMax API key (optional — required only for `/query` endpoint) | - |
 | `LLM_API_BASE` | LLM API base URL | `https://api.minimax.chat/v1` |
 | `EMBED_MODEL_NAME` | Embedding model (local: `all-MiniLM-L6-v2`, or API: `text-embedding-3-small`) | `all-MiniLM-L6-v2` |
