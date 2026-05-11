@@ -16,6 +16,7 @@
 ## ✨ Features
 
 - 📤 **Upload PDFs** - Drag & drop PDF files
+- 🌐 **Crawl Websites** - Extract content from web pages to create skills (bulk or single page)
 - 🤖 **AI Extraction** - Automatic knowledge extraction with embeddings (local or API-based)
 - 💬 **Query Skills** - Ask questions using RAG
 - 📥 **Download Skills** - Export in `.skill`, `.md`, or `.json` formats
@@ -119,6 +120,7 @@ pdftoskill/
 | Method | Endpoint | Description |
 |:------:|----------|-------------|
 | `POST` | `/upload` | 📤 Upload PDF to create skill |
+| `POST` | `/crawl` | 🌐 Crawl website to create skill |
 | `GET` | `/skills` | 📋 List all skills |
 | `GET` | `/skills/{id}` | 🔍 Get skill details |
 | `POST` | `/skills/{id}/query` | 💬 Query a skill |
