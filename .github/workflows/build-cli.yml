@@ -10,10 +10,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: windows-latest
-            path: "backend/dist/ai-skill-generator.exe"
           - os: ubuntu-latest
             path: "backend/dist/ai-skill-generator"
+            name: "ai-skill-generator-linux-x64"
+          - os: windows-latest
+            path: "backend/dist/ai-skill-generator.exe"
+            name: "ai-skill-generator-windows-x64.exe"
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -32,14 +34,14 @@ jobs:
           cd backend
           pyinstaller --onefile --console --strip --name ai-skill-generator cli.py
 
-      - name: Make Linux binary executable
+      - name: Make Linux executable
         if: runner.os == 'Linux'
         run: chmod +x backend/dist/ai-skill-generator
 
-      - name: Upload artifact
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ runner.os }}-artifact
+          name: ${{ matrix.name }}
           path: ${{ matrix.path }}
 
   release:
@@ -49,23 +51,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: "*-artifact"
           path: artifacts
-          merge-multiple: true
 
-      - name: Rename artifacts
-        run: |
-          mv Linux-artifact ai-skill-generator-linux-x64 || true
-          mv Windows-artifact ai-skill-generator-windows-x64.exe || true
-          chmod +x ai-skill-generator-linux-x64
-          ls -la
+      - name: List artifacts
+        run: ls -la artifacts/
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ai-skill-generator-windows-x64.exe
-            ai-skill-generator-linux-x64
+            artifacts/ai-skill-generator-windows-x64.exe
+            artifacts/ai-skill-generator-linux-x64
