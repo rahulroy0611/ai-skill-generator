@@ -197,21 +197,27 @@ def generate_skill(name: str, text: str, output_dir: str = "output"):
         json.dump(skill_data, f, indent=2)
     print(f"  Created: {safe_name}.json")
 
-    skill_text = f"""SKILL METADATA
-============
-name: {name}
-type: rag
-generated: {datetime.now().isoformat()}
-
-KNOWLEDGE BASE (with embeddings)
-============
-"""
+    skill_lines = [
+        "SKILL METADATA",
+        "============",
+        f"name: {name}",
+        "type: rag",
+        f"generated: {datetime.now().isoformat()}",
+        "",
+        "KNOWLEDGE BASE (with embeddings)",
+        "============",
+        "",
+    ]
     for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
-        skill_text += f"\n---
-CHUNK #{i+1}
-EMBEDDING: {json.dumps(emb)}
----
-{chunk}\n"
+        skill_lines.extend([
+            "---",
+            f"CHUNK #{i+1}",
+            f"EMBEDDING: {json.dumps(emb)}",
+            "---",
+            chunk,
+            "",
+        ])
+    skill_text = "\n".join(skill_lines)
 
     with open(os.path.join(skill_dir, f"{safe_name}.skill"), "w", encoding="utf-8") as f:
         f.write(skill_text)
