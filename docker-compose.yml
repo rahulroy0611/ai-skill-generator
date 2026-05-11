@@ -27,11 +27,8 @@ services:
     container_name: pdftoskill-backend
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/pdftoskill
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_API_BASE: ${LLM_API_BASE:-https://api.minimax.chat/v1}
-      EMBED_MODEL_NAME: all-MiniLM-L6-v2
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
