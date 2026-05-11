@@ -50,6 +50,29 @@ PDF / Website URL
 
 ---
 
+## 🖼️ Screenshots
+
+<table>
+  <tr>
+    <td align="center"><b>Extract from Website</b></td>
+    <td align="center"><b>My Skills</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/extract-website.png" alt="Website extraction in progress" width="480"/></td>
+    <td><img src="docs/screenshots/my-skills.png" alt="Skills list" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>RAG Query</b></td>
+    <td align="center"><b>API Reference</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/rag-query.png" alt="Ask questions using RAG" width="480"/></td>
+    <td><img src="docs/screenshots/api-reference.png" alt="Built-in API reference" width="480"/></td>
+  </tr>
+</table>
+
+---
+
 ## 📦 Export formats
 
 > One skill, every tool. Export once, use anywhere.
