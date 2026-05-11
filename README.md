@@ -11,10 +11,12 @@
 
 > 🎯 Convert PDFs into reusable AI skills with embeddings for semantic search.
 
+**Note:** This project does not require opencode to run. It's a standalone web application.
+
 ## ✨ Features
 
 - 📤 **Upload PDFs** - Drag & drop PDF files
-- 🤖 **AI Extraction** - Automatic knowledge extraction with embeddings
+- 🤖 **AI Extraction** - Automatic knowledge extraction with embeddings (local or API-based)
 - 💬 **Query Skills** - Ask questions using RAG
 - 📥 **Download Skills** - Export in `.skill`, `.md`, or `.json` formats
 - 🗑️ **Delete Skills** - Manage your skills easily
@@ -168,9 +170,13 @@ cp .env.sample .env
 | Variable | Description | Default |
 |:---------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://postgres:postgres@db:5432/pdftoskill` |
-| `LLM_API_KEY` | MiniMax API key (optional) | - |
+| `LLM_API_KEY` | MiniMax API key (optional — required only for `/query` endpoint) | - |
 | `LLM_API_BASE` | LLM API base URL | `https://api.minimax.chat/v1` |
-| `EMBED_MODEL_NAME` | Embedding model | `all-MiniLM-L6-v2` |
+| `EMBED_MODEL_NAME` | Embedding model (local: `all-MiniLM-L6-v2`, or API: `text-embedding-3-small`) | `all-MiniLM-L6-v2` |
+| `EMBED_API_KEY` | API key for external embedding provider (e.g., OpenAI) | - |
+| `EMBED_API_BASE` | API base URL for external embeddings (leave empty for local model) | - |
+
+**Note:** If using an API-based embedding model, `EMBED_API_KEY` and `EMBED_API_BASE` are required. If using the local default model, no additional setup is needed — the model downloads automatically on first use.
 
 ---
 

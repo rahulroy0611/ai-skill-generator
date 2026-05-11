@@ -11,6 +11,8 @@ function App() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [websiteSuccess, setWebsiteSuccess] = useState(false)
+  const [statusMessage, setStatusMessage] = useState('')
   const [selectedSkill, setSelectedSkill] = useState(null)
   const [query, setQuery] = useState('')
   const [answer, setAnswer] = useState('')
@@ -76,20 +78,47 @@ function App() {
     if (!websiteUrl) return
     setUploading(true)
     setUploadProgress(0)
-    setUploadSuccess(false)
+    setWebsiteSuccess(false)
+    setStatusMessage('Starting crawl...')
+
+    let pollInterval = null
+
+    const startPolling = () => {
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await axios.get(`${API_URL}/crawl-progress`)
+          const progress = res.data
+          if (progress.in_progress) {
+            setStatusMessage(`Crawling: ${progress.visited} pages visited`)
+            setUploadProgress(Math.min(95, progress.visited))
+          }
+        } catch (err) {
+          console.error('Progress poll failed:', err)
+        }
+      }, 2000)
+    }
+
+    startPolling()
 
     try {
       const res = await axios.post(`${API_URL}/upload-website`, {
         url: websiteUrl,
       })
-      setUploadSuccess(true)
+      setUploadProgress(100)
+      setStatusMessage('Complete!')
+      setWebsiteSuccess(true)
       setWebsiteUrl('')
       fetchSkills()
     } catch (err) {
       console.error('Website upload failed:', err)
       alert(err.response?.data?.detail || 'Failed to extract website')
     } finally {
+      if (pollInterval) clearInterval(pollInterval)
       setUploading(false)
+      setTimeout(() => {
+        setStatusMessage('')
+        setUploadProgress(0)
+      }, 2000)
     }
   }
 
@@ -186,7 +215,7 @@ function App() {
               </div>
 
               {file && (
-<motion.button
+                <motion.button
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   onClick={uploadPdf}
@@ -195,17 +224,17 @@ function App() {
                 >
                   {uploading ? `Uploading... ${uploadProgress}%` : 'Upload PDF'}
                 </motion.button>
+              )}
 
-                {uploadSuccess && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="mt-4 p-4 bg-green-500/20 border border-green-500 rounded-lg text-green-400 text-center"
-                  >
-                    PDF uploaded successfully!
-                  </motion.div>
-                )}
-              </div>
+              {uploadSuccess && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mt-4 p-4 bg-green-500/20 border border-green-500 rounded-lg text-green-400 text-center"
+                >
+                  PDF uploaded successfully!
+                </motion.div>
+              )}
 
               <div className="bg-gray-800/50 backdrop-blur rounded-xl p-6 border border-gray-700 mt-6">
                 <h2 className="text-xl font-semibold mb-4 text-purple-400">Or Create from Website</h2>
@@ -226,18 +255,33 @@ function App() {
                     Extract
                   </button>
                 </div>
-                <p className="text-gray-400 text-sm mt-2">
+<p className="text-gray-400 text-sm mt-2">
                   Extract content from any website URL
                 </p>
-              )}
 
-              {uploadSuccess && (
+                {uploading && (
+                  <div className="mt-3">
+                    <div className="flex justify-between text-xs text-gray-400 mb-1">
+                      <span>{statusMessage || 'Processing...'}</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-gradient-to-r from-purple-500 to-pink-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {websiteSuccess && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   className="mt-4 p-4 bg-green-500/20 border border-green-500 rounded-lg text-green-400 text-center"
                 >
-                  Skill built successfully!
+                  Website skill built successfully!
                 </motion.div>
               )}
             </div>

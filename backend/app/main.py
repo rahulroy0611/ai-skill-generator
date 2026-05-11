@@ -29,6 +29,14 @@ class SkillQuery(BaseModel):
     query: str
 
 
+crawl_progress = {"fetched": 0, "visited": 0, "in_progress": False}
+
+
+def progress_callback(fetched: int, visited: int):
+    crawl_progress["fetched"] = fetched
+    crawl_progress["visited"] = visited
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
@@ -67,16 +75,21 @@ async def upload_website(request: WebsiteInput):
         raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
     
     try:
-        website_extractor = WebsiteExtractor()
-        text = website_extractor.extract_text(request.url)
+        crawl_progress["in_progress"] = True
+        crawl_progress["fetched"] = 0
+        crawl_progress["visited"] = 0
+        
+        extractor = WebsiteExtractor(max_pages=None, max_chars=None)
+        text, title = await extractor.crawl_async(request.url, progress_callback=progress_callback)
         
         if not text or len(text.strip()) < 50:
             raise HTTPException(status_code=400, detail="Could not extract enough content from the website")
         
-        title = website_extractor.get_title(request.url) or "website_skill"
         filename = f"{title}.txt"
         
         result = await skill_builder.build_skill(text.encode('utf-8'), filename, is_text=True)
+        
+        crawl_progress["in_progress"] = False
         
         return UploadResponse(
             skill_id=result["skill_id"],
@@ -84,9 +97,16 @@ async def upload_website(request: WebsiteInput):
             status=result["status"],
         )
     except ValueError as e:
+        crawl_progress["in_progress"] = False
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        crawl_progress["in_progress"] = False
         raise HTTPException(status_code=500, detail=f"Failed to process website: {str(e)}")
+
+
+@app.get("/crawl-progress")
+async def get_crawl_progress():
+    return crawl_progress
 
 
 @app.get("/skills", response_model=list[SkillResponse])
