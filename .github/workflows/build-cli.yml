@@ -32,11 +32,29 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Resolve version tag
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "value=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install CPU-only PyTorch
         run: pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install dependencies
-        run: pip install pyinstaller pdfplumber sentence-transformers beautifulsoup4 lxml httpx numpy
+        run: pip install pyinstaller pdfplumber sentence-transformers beautifulsoup4 lxml httpx numpy pillow
+
+      - name: Generate icon
+        run: python backend/build_icon.py
+
+      - name: Generate Windows version info
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python backend/generate_version_info.py "${{ steps.ver.outputs.value }}"
 
       - name: Build binary (Linux)
         if: runner.os == 'Linux'
@@ -45,8 +63,6 @@ jobs:
           pyinstaller \
             --onefile --console --strip \
             --name ai-skill-generator \
-            --exclude-module torch.distributed \
-            --exclude-module torch.testing \
             --exclude-module torchvision \
             --exclude-module torchaudio \
             cli.py
@@ -57,8 +73,8 @@ jobs:
         run: |
           Set-Location backend
           pyinstaller --onefile --console --name ai-skill-generator `
-            --exclude-module torch.distributed `
-            --exclude-module torch.testing `
+            --icon icon.ico `
+            --version-file version_info.txt `
             --exclude-module torchvision `
             --exclude-module torchaudio `
             cli.py

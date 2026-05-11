@@ -283,13 +283,21 @@ output/
 ```bash
 cd backend
 pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install pyinstaller pdfplumber sentence-transformers beautifulsoup4 lxml httpx numpy
+pip install pyinstaller pdfplumber sentence-transformers beautifulsoup4 lxml httpx numpy pillow
+
+# Generate icon + Windows version info
+python build_icon.py
+python generate_version_info.py 1.0.0   # Windows only
 
 # Linux
-pyinstaller --onefile --console --strip --name ai-skill-generator cli.py
+pyinstaller --onefile --console --strip --name ai-skill-generator \
+  --exclude-module torchvision --exclude-module torchaudio cli.py
 
-# Windows
-pyinstaller --onefile --console --name ai-skill-generator cli.py
+# Windows — custom icon + embedded version metadata
+pyinstaller --onefile --console --name ai-skill-generator `
+  --icon icon.ico `
+  --version-file version_info.txt `
+  --exclude-module torchvision --exclude-module torchaudio cli.py
 ```
 
 ---
