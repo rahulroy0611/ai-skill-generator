@@ -29,6 +29,10 @@
 git clone https://github.com/YOUR_USERNAME/pdftoskill.git
 cd pdftoskill
 
+# Copy environment template
+cp .env.sample .env
+# Edit .env with your settings (optional - defaults work out of the box)
+
 # Start all services
 docker-compose up --build
 ```
@@ -155,9 +159,15 @@ docker-compose up --build
 
 ## ⚙️ Environment Variables
 
+Copy the template before running:
+
+```bash
+cp .env.sample .env
+```
+
 | Variable | Description | Default |
 |:---------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://postgres:postgres@localhost:5432/pdftoskill` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://postgres:postgres@db:5432/pdftoskill` |
 | `LLM_API_KEY` | MiniMax API key (optional) | - |
 | `LLM_API_BASE` | LLM API base URL | `https://api.minimax.chat/v1` |
 | `EMBED_MODEL_NAME` | Embedding model | `all-MiniLM-L6-v2` |
