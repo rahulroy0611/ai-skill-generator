@@ -6,9 +6,9 @@
 
 Upload a document or paste a URL → get ready-to-use skill files for Claude, Cursor, Copilot, OpenCode, Windsurf, Cline, Aider and more.
 
-[![Release](https://img.shields.io/github/v/release/rahulroy0611/pdf-to-skill?style=flat-square&color=6366f1)](../../releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/rahulroy0611/pdf-to-skill/build-cli.yml?style=flat-square&label=CLI%20build)](../../actions/workflows/build-cli.yml)
-[![License](https://img.shields.io/github/license/rahulroy0611/pdf-to-skill?style=flat-square&color=10b981)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/rahulroy0611/ai-skill-generator?style=flat-square&color=6366f1)](../../releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/rahulroy0611/ai-skill-generator/build-cli.yml?style=flat-square&label=CLI%20build)](../../actions/workflows/build-cli.yml)
+[![License](https://img.shields.io/github/license/rahulroy0611/ai-skill-generator?style=flat-square&color=10b981)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
@@ -74,8 +74,8 @@ PDF / Website URL
 ### Option A — Docker (recommended)
 
 ```bash
-git clone https://github.com/rahulroy0611/pdf-to-skill.git
-cd pdf-to-skill
+git clone https://github.com/rahulroy0611/ai-skill-generator.git
+cd ai-skill-generator
 cp backend/.env.sample .env
 # edit .env — add your DB password and LLM API key
 docker compose up -d
