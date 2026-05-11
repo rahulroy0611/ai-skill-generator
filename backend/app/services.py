@@ -145,8 +145,12 @@ class SkillBuilder:
         self.llm_client = llm_client
         self.embedding_service = embedding_service
 
-    async def build_skill(self, file_bytes: bytes, filename: str) -> dict[str, Any]:
-        text = self.pdf_extractor.extract_text(file_bytes)
+    async def build_skill(self, file_bytes: bytes, filename: str, is_text: bool = False) -> dict[str, Any]:
+        if is_text:
+            text = file_bytes.decode('utf-8', errors='ignore')
+        else:
+            text = self.pdf_extractor.extract_text(file_bytes)
+        
         blueprint = self.llm_client.analyze_pdf(text)
 
         async with AsyncSessionLocal() as db:

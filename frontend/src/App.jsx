@@ -7,6 +7,7 @@ const API_URL = 'http://localhost:8000'
 function App() {
   const [skills, setSkills] = useState([])
   const [file, setFile] = useState(null)
+  const [websiteUrl, setWebsiteUrl] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadSuccess, setUploadSuccess] = useState(false)
@@ -66,6 +67,27 @@ function App() {
       fetchSkills()
     } catch (err) {
       console.error('Upload failed:', err)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const uploadWebsite = async () => {
+    if (!websiteUrl) return
+    setUploading(true)
+    setUploadProgress(0)
+    setUploadSuccess(false)
+
+    try {
+      const res = await axios.post(`${API_URL}/upload-website`, {
+        url: websiteUrl,
+      })
+      setUploadSuccess(true)
+      setWebsiteUrl('')
+      fetchSkills()
+    } catch (err) {
+      console.error('Website upload failed:', err)
+      alert(err.response?.data?.detail || 'Failed to extract website')
     } finally {
       setUploading(false)
     }
@@ -164,15 +186,49 @@ function App() {
               </div>
 
               {file && (
-                <motion.button
+<motion.button
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   onClick={uploadPdf}
                   disabled={uploading}
                   className="mt-4 w-full py-3 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
-                  {uploading ? `Uploading... ${uploadProgress}%` : 'Upload & Build Skill'}
+                  {uploading ? `Uploading... ${uploadProgress}%` : 'Upload PDF'}
                 </motion.button>
+
+                {uploadSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="mt-4 p-4 bg-green-500/20 border border-green-500 rounded-lg text-green-400 text-center"
+                  >
+                    PDF uploaded successfully!
+                  </motion.div>
+                )}
+              </div>
+
+              <div className="bg-gray-800/50 backdrop-blur rounded-xl p-6 border border-gray-700 mt-6">
+                <h2 className="text-xl font-semibold mb-4 text-purple-400">Or Create from Website</h2>
+
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    className="flex-1 p-3 bg-gray-700/50 border border-gray-600 rounded-lg focus:border-purple-400 focus:outline-none text-white"
+                  />
+                  <button
+                    onClick={uploadWebsite}
+                    disabled={uploading || !websiteUrl}
+                    className="px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    Extract
+                  </button>
+                </div>
+                <p className="text-gray-400 text-sm mt-2">
+                  Extract content from any website URL
+                </p>
               )}
 
               {uploadSuccess && (

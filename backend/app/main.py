@@ -8,9 +8,14 @@ from sqlalchemy import select, text, delete
 from pydantic import BaseModel
 from typing import Optional
 
+
+class WebsiteInput(BaseModel):
+    url: str
+
 from app.database import engine, Base, AsyncSessionLocal, Skill, SkillArtifact, init_db
 from app.database import SkillResponse, UploadResponse, QueryResponse
 from app.services import PDFExtractor, LLMClient, EmbeddingService, SkillBuilder, SkillQueryService
+from app.website_extractor import WebsiteExtractor
 
 
 pdf_extractor = PDFExtractor()
@@ -54,6 +59,34 @@ async def upload_pdf(file: UploadFile = File(...)):
         name=result["name"],
         status=result["status"],
     )
+
+
+@app.post("/upload-website", response_model=UploadResponse)
+async def upload_website(request: WebsiteInput):
+    if not request.url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+    
+    try:
+        website_extractor = WebsiteExtractor()
+        text = website_extractor.extract_text(request.url)
+        
+        if not text or len(text.strip()) < 50:
+            raise HTTPException(status_code=400, detail="Could not extract enough content from the website")
+        
+        title = website_extractor.get_title(request.url) or "website_skill"
+        filename = f"{title}.txt"
+        
+        result = await skill_builder.build_skill(text.encode('utf-8'), filename, is_text=True)
+        
+        return UploadResponse(
+            skill_id=result["skill_id"],
+            name=result["name"],
+            status=result["status"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process website: {str(e)}")
 
 
 @app.get("/skills", response_model=list[SkillResponse])
