@@ -87,20 +87,66 @@ Open **http://localhost** in your browser. Done.
 
 ### Option B — Manual
 
-> **Requirements:** Python 3.11+ · Node.js 18+ · PostgreSQL 16+
+> **Requirements:** Python 3.11+ · Node.js 18+ · PostgreSQL 16+ with pgvector
 
 ```bash
-# 1. Backend
+# 1. Database — create and apply schema
+psql -U postgres -c "CREATE DATABASE ai_skill_generator;"
+psql -U postgres -d ai_skill_generator -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql -U postgres -d ai_skill_generator -f backend/database/schema.sql
+
+# 2. Backend
 cd backend
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.sample .env                                # fill in your values
 uvicorn app.main:app --reload --port 8000
 
-# 2. Frontend  (new terminal)
+# 3. Frontend  (new terminal)
 cd frontend
 npm install && npm run dev
 ```
+
+---
+
+## 🗄️ Database setup
+
+> Docker handles this automatically. These steps are only needed for **manual installs**.
+
+### Schema
+
+The schema lives in [backend/database/schema.sql](backend/database/schema.sql). It creates two tables:
+
+| Table | Purpose |
+|:---|:---|
+| `skills` | One row per skill — name, type, metadata, created_at |
+| `skill_artifacts` | Chunked text + embedding vector per skill |
+
+### Create the database manually
+
+```bash
+# Connect to PostgreSQL
+psql -U postgres
+
+# Inside psql:
+CREATE DATABASE ai_skill_generator;
+\c ai_skill_generator
+CREATE EXTENSION IF NOT EXISTS vector;
+\q
+
+# Apply schema
+psql -U postgres -d ai_skill_generator -f backend/database/schema.sql
+```
+
+### Windows (psql not in PATH)
+
+```powershell
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -c "CREATE DATABASE ai_skill_generator;"
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -d ai_skill_generator -c "CREATE EXTENSION IF NOT EXISTS vector;"
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -d ai_skill_generator -f backend/database/schema.sql
+```
+
+> **Note:** pgvector must be installed on your PostgreSQL instance. With Docker (`pgvector/pgvector:pg16`) it is pre-installed.
 
 ---
 

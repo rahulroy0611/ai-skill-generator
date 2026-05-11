@@ -6,9 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag (e.g. v1.0.0)"
-        required: false
-        default: "dev"
+        description: "Existing release tag to attach binaries to (e.g. v1.0.0)"
+        required: true
 
 jobs:
   build:
@@ -84,25 +83,33 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
     permissions:
       contents: write
 
     steps:
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "value=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
-      - name: List files
+      - name: List artifacts
         run: ls -lh artifacts/
 
       - name: Upload binaries to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" \
+          gh release upload "${{ steps.tag.outputs.value }}" \
             artifacts/ai-skill-generator-linux-x64 \
             artifacts/ai-skill-generator-windows-x64.exe \
             --repo "${{ github.repository }}" \
